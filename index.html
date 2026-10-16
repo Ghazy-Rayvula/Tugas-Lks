@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOMailer - Bootstrap & JS Inbox</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .email-row { cursor: pointer; }
+        .email-row.unread { font-weight: bold; background-color: #ffffff; }
+        .email-row.read { font-weight: normal; background-color: #f8f9fa; color: #6c757d; }
+        .star-btn { cursor: pointer; color: #adb5bd; }
+        .star-btn.active { color: #ffc107; }
+    </style>
+</head>
+<body>
+
+    <div class="container my-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="fw-bold mb-0">DOMailer</h2>
+            <div class="text-secondary small fw-semibold" id="counter-stats">
+                Unread: 0 | Starred: 0
+            </div>
+        </div>
+
+        <div class="row g-2 mb-3 align-items-center">
+            <div class="col-md-5">
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="text" id="search-input" class="form-control" placeholder="Search by sender or subject...">
+                </div>
+            </div>
+            <div class="col-md-7 d-flex justify-content-md-end gap-2">
+                <div class="btn-group">
+                    <button type="button" class="btn btn-primary filter-btn" onclick="setFilter('all')">All</button>
+                    <button type="button" class="btn btn-outline-primary filter-btn" onclick="setFilter('unread')">Unread</button>
+                    <button type="button" class="btn btn-outline-primary filter-btn" onclick="setFilter('starred')">Starred</button>
+                </div>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#composeModal">
+                    <i class="bi bi-plus-lg"></i> Compose
+                </button>
+            </div>
+        </div>
+
+        <div class="card mb-3 border-0 shadow-sm">
+            <div class="card-body py-2 d-flex align-items-center gap-3">
+                <span class="small fw-bold text-secondary" id="selected-count-label">0 item(s) selected</span>
+                <button class="btn btn-sm btn-primary" id="bulk-read-btn" onclick="bulkMarkRead()" disabled>Mark as Read</button>
+                <button class="btn btn-sm btn-danger" id="bulk-delete-btn" onclick="bulkDelete()" disabled>Delete Selected</button>
+            </div>
+        </div>
+
+        <div class="table-responsive bg-white rounded shadow-sm">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 40px;"><input class="form-check-input" type="checkbox" id="select-all-checkbox" onclick="toggleSelectAll(this)"></th>
+                        <th style="width: 40px;"><i class="bi bi-star"></i></th>
+                        <th style="width: 200px;">Sender</th>
+                        <th>Subject & Content</th>
+                        <th style="width: 120px;">Date</th>
+                        <th style="width: 80px;" class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="email-table-body">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="modal fade" id="readEmailModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-subject"></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between mb-3 text-muted small">
+                        <div><strong>From:</strong> <span id="modal-sender"></span></div>
+                        <div id="modal-date"></div>
+                    </div>
+                    <hr>
+                    <p id="modal-body-text" style="white-space: pre-line;"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="composeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">New Message</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form onsubmit="sendEmail(event)">
+                        <div class="mb-3">
+                            <label class="form-label">To:</label>
+                            <input type="text" class="form-control" id="compose-recipient" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Subject:</label>
+                            <input type="text" class="form-control" id="compose-subject" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Message:</label>
+                            <textarea class="form-control" id="compose-body" rows="4" required></textarea>
+                        </div>
+                        <div class="text-end">
+                            <button type="submit" class="btn btn-primary">Send</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        let emails = [
+            { id: "1", sender: "HR TechCorp", subject: "URGENT: Submit Q4 Performance Assessment", body: "Please complete your quarterly review before 5 PM today to avoid delay in processing.", date: "08:15 AM", isRead: false, isStarred: true },
+            { id: "2", sender: "Alex Dev", subject: "Code Review - PR #402 DOM Refactoring", body: "Hey, can you take a look at the event delegation implementation when you have time?", date: "08:42 AM", isRead: false, isStarred: false },
+            { id: "3", sender: "GitHub Notifications", subject: "[IMPORTANT] Security alert on repository main branch", body: "We detected a potential dependency vulnerability in package.json. Please update immediately.", date: "09:05 AM", isRead: false, isStarred: true },
+            { id: "4", sender: "Sarah Product Lead", subject: "Sprint Planning Alignment for Next Week", body: "Let's align our backlog items for DOMailer milestone 2 tomorrow at 10 AM.", date: "09:30 AM", isRead: true, isStarred: false },
+            { id: "5", sender: "Figma Team", subject: "New comments on DOMailer UI Wireframes", body: "Sarah left 3 new comments on the table view layout component.", date: "10:00 AM", isRead: true, isStarred: false },
+            { id: "6", sender: "DevOps Ops", subject: "Staging Server Maintenance Notice", body: "Staging environment will be down for scheduled upgrades tonight between 11 PM and 1 AM.", date: "10:15 AM", isRead: true, isStarred: false },
+            { id: "7", sender: "Client Support", subject: "URGENT: Login issue reported on production", body: "Multiple users are reporting intermittent 500 errors when submitting the login form.", date: "10:45 AM", isRead: false, isStarred: true },
+            { id: "8", sender: "Slack Workspace", subject: "Weekly Activity Digest for TechCorp", body: "Here is your weekly summary: 142 new messages across 8 active channels.", date: "11:20 AM", isRead: true, isStarred: false },
+            { id: "9", sender: "Finance Department", subject: "Reimbursement Claim Approved", body: "Your internet allowance claim for last month has been processed and approved.", date: "11:50 AM", isRead: true, isStarred: true },
+            { id: "10", sender: "Radian QA", subject: "Bug Report: Checkbox bulk selection bug", body: "When select all is checked, unchecking one row does not update the master checkbox state.", date: "12:10 PM", isRead: false, isStarred: false },
+            { id: "11", sender: "Google Calendar", subject: "Reminder: All-Hands Meeting in 30 minutes", body: "Company updates and Q&A session with the executive team. Zoom link attached.", date: "01:30 PM", isRead: false, isStarred: false },
+            { id: "12", sender: "Jessica TechCorp", subject: "Design System Guidelines v2.0", body: "Check out the updated color tokens and button states for DOMailer dark mode.", date: "02:00 PM", isRead: true, isStarred: false },
+            { id: "13", sender: "Vercel Deployments", subject: "Deployment successful for domailer-staging", body: "Your commit 'fix: update event listener logic' was successfully deployed to production preview.", date: "02:25 PM", isRead: true, isStarred: false },
+            { id: "14", sender: "IT Helpdesk", subject: "IMPORTANT: Password Reset Required", body: "Your corporate account password will expire in 3 days. Please update it via portal.", date: "03:10 PM", isRead: false, isStarred: true },
+            { id: "15", sender: "Medium Daily", subject: "Top stories in JavaScript Performance & DOM Optimization", body: "Discover why event delegation improves memory management in heavy web applications.", date: "Yesterday", isRead: true, isStarred: false },
+            { id: "16", sender: "Michael Lead Dev", subject: "Architecture Review Feedback", body: "Great job on keeping the code modular. Let's optimize the filter algorithm next.", date: "Yesterday", isRead: true, isStarred: true },
+            { id: "17", sender: "Notion Updates", subject: "Page shared with you: DOMailer Documentation", body: "Michael shared 'DOMailer Component Lifecycle' page with your workspace.", date: "Yesterday", isRead: true, isStarred: false },
+            { id: "18", sender: "HR TechCorp", subject: "Town Hall Feedback Survey", body: "We value your input! Take 2 minutes to fill out the anonymous feedback form.", date: "Yesterday", isRead: true, isStarred: false },
+            { id: "19", sender: "LinkedIn Jobs", subject: "New Frontend Developer roles matching your profile", body: "Explore 5 new remote opportunities matching Senior Vanilla JavaScript Developer.", date: "2 days ago", isRead: true, isStarred: false },
+            { id: "20", sender: "NPM Registry", subject: "[URGENT] Deprecation notice for package user-event", body: "Version 12.x of user-event is now deprecated. Please upgrade to version 14.x immediately.", date: "2 days ago", isRead: false, isStarred: false },
+            { id: "21", sender: "David Frontend", subject: "Question about DOM traversal methods", body: "Should we prefer closest() over parentElement for nested table rows in DOMailer?", date: "2 days ago", isRead: true, isStarred: false },
+            { id: "22", sender: "Spotify for Work", subject: "Your Weekly Focused Coding Playlist", body: "Deep focus beats curated for frontend engineering sessions.", date: "3 days ago", isRead: true, isStarred: false },
+            { id: "23", sender: "AWS Billing", subject: "Monthly Invoice Available for Account #8902", body: "Your monthly usage statement for September is available for download.", date: "3 days ago", isRead: true, isStarred: false },
+            { id: "24", sender: "TechCorp Security", subject: "IMPORTANT: 2FA Enrollment Notice", body: "Two-Factor Authentication will be enforced for all developer accounts starting Friday.", date: "4 days ago", isRead: false, isStarred: true },
+            { id: "25", sender: "Postman Team", subject: "Collection DOMailer API Mock shared", body: "Alex updated the response schemas for GET /emails and POST /emails/compose.", date: "4 days ago", isRead: true, isStarred: false },
+            { id: "26", sender: "Coursera Tech", subject: "Certificate earned: Advanced JavaScript Data Structures", body: "Congratulations! Your certificate is ready to be shared on your LinkedIn profile.", date: "5 days ago", isRead: true, isStarred: true },
+            { id: "27", sender: "Dribbble Digest", subject: "Minimalist Dashboard Design Inspiration", body: "Top 10 clean table and inbox UI designs selected by the community this week.", date: "5 days ago", isRead: true, isStarred: false },
+            { id: "28", sender: "Office Facilities", subject: "Desk Allocation Update for Q4", body: "Please review your new seat assignment for the Engineering floor in Building B.", date: "6 days ago", isRead: true, isStarred: false },
+            { id: "29", sender: "Sentry Error Tracker", subject: "URGENT: Unhandled TypeException in Production", body: "New exception caught in app.js at line 84: Cannot read properties of null.", date: "Oct 01", isRead: false, isStarred: true },
+            { id: "30", sender: "TechCorp Onboarding", subject: "Welcome to TechCorp Engineering Team!", body: "Welcome aboard! Here are all the resources to get your local environment set up.", date: "Sep 28", isRead: true, isStarred: true }
+        ];
+
+        let currentFilter = 'all';
+
+        function displayEmails() {
+            let tbody = document.getElementById('email-table-body');
+            tbody.innerHTML = '';
+            
+            let keyword = document.getElementById('search-input').value.toLowerCase();
+
+            let filtered = emails.filter(item => {
+                if (currentFilter === 'unread' && item.isRead) return false;
+                if (currentFilter === 'starred' && !item.isStarred) return false;
+
+                let matchSearch = item.sender.toLowerCase().includes(keyword) || 
+                                  item.subject.toLowerCase().includes(keyword) || 
+                                  item.body.toLowerCase().includes(keyword);
+                return matchSearch;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted">Tidak ada email.</td></tr>`;
+                updateInfo();
+                return;
+            }
+
+            filtered.forEach(item => {
+                let rowClass = item.isRead ? 'read' : 'unread';
+                let starClass = item.isStarred ? 'active' : '';
+
+                let tr = document.createElement('tr');
+                tr.className = `email-row ${rowClass}`;
+                tr.innerHTML = `
+                    <td><input class="form-check-input row-checkbox" type="checkbox" value="${item.id}" onchange="updateInfo()"></td>
+                    <td><i class="bi bi-star-fill star-btn ${starClass}" onclick="toggleStar(event, '${item.id}')"></i></td>
+                    <td onclick="openEmail('${item.id}')">${item.sender}</td>
+                    <td onclick="openEmail('${item.id}')"><strong>${item.subject}</strong> - ${item.body}</td>
+                    <td onclick="openEmail('${item.id}')" class="text-muted small">${item.date}</td>
+                    <td class="text-end"><button class="btn btn-sm btn-link text-danger p-0" onclick="deleteEmail(event, '${item.id}')">Delete</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            updateInfo();
+        }
+
+        function setFilter(type) {
+            currentFilter = type;
+            let buttons = document.querySelectorAll('.filter-btn');
+            buttons.forEach(btn => {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-outline-primary');
+            });
+            event.target.classList.remove('btn-outline-primary');
+            event.target.classList.add('btn-primary');
+            displayEmails();
+        }
+
+        function openEmail(id) {
+            let email = emails.find(item => item.id === id);
+            if(email) {
+                email.isRead = true;
+                document.getElementById('modal-subject').innerText = email.subject;
+                document.getElementById('modal-sender').innerText = email.sender;
+                document.getElementById('modal-date').innerText = email.date;
+                document.getElementById('modal-body-text').innerText = email.body;
+
+                let myModal = new bootstrap.Modal(document.getElementById('readEmailModal'));
+                myModal.show();
+                displayEmails();
+            }
+        }
+
+        function toggleStar(e, id) {
+            e.stopPropagation();
+            let email = emails.find(item => item.id === id);
+            if(email) {
+                email.isStarred = !email.isStarred;
+                displayEmails();
+            }
+        }
+
+        function deleteEmail(e, id) {
+            e.stopPropagation();
+            emails = emails.filter(item => item.id !== id);
+            displayEmails();
+        }
+
+        function toggleSelectAll(master) {
+            let checkboxes = document.querySelectorAll('.row-checkbox');
+            checkboxes.forEach(cb => cb.checked = master.checked);
+            updateInfo();
+        }
+
+        function updateInfo() {
+            let unreadCount = emails.filter(item => !item.isRead).length;
+            let starredCount = emails.filter(item => item.isStarred).length;
+            document.getElementById('counter-stats').innerText = `Unread: ${unreadCount} | Starred: ${starredCount}`;
+
+            let checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+            let count = checkedBoxes.length;
+            document.getElementById('selected-count-label').innerText = `${count} item(s) selected`;
+
+            let btnRead = document.getElementById('bulk-read-btn');
+            let btnDelete = document.getElementById('bulk-delete-btn');
+            if (count > 0) {
+                btnRead.removeAttribute('disabled');
+                btnDelete.removeAttribute('disabled');
+            } else {
+                btnRead.setAttribute('disabled', 'true');
+                btnDelete.setAttribute('disabled', 'true');
+            }
+        }
+
+        function bulkMarkRead() {
+            let checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+            checkedBoxes.forEach(cb => {
+                let email = emails.find(item => item.id === cb.value);
+                if(email) email.isRead = true;
+            });
+            document.getElementById('select-all-checkbox').checked = false;
+            displayEmails();
+        }
+
+        function bulkDelete() {
+            let checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+            let idsToDelete = Array.from(checkedBoxes).map(cb => cb.value);
+            emails = emails.filter(item => !idsToDelete.includes(item.id));
+            document.getElementById('select-all-checkbox').checked = false;
+            displayEmails();
+        }
+
+        function sendEmail(e) {
+            e.preventDefault();
+            let recipient = document.getElementById('compose-recipient').value;
+            let subject = document.getElementById('compose-subject').value;
+            let body = document.getElementById('compose-body').value;
+
+            let newMail = {
+                id: Date.now().toString(),
+                sender: recipient,
+                subject: subject,
+                body: body,
+                date: "Baru saja",
+                isRead: true,
+                isStarred: false
+            };
+
+            emails.unshift(newMail);
+            displayEmails();
+
+            let modalEl = document.getElementById('composeModal');
+            let modalObj = bootstrap.Modal.getInstance(modalEl);
+            modalObj.hide();
+            e.target.reset();
+        }
+
+        document.getElementById('search-input').addEventListener('input', displayEmails);
+
+        displayEmails();
+    </script>
+</body>
+</html>
